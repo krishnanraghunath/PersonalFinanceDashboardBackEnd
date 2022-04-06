@@ -1,0 +1,173 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Personal Finance Project
+
+  Sample SAM Template for Personal Finance Project
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+Parameters:
+  BankAccountStatementBucketName:
+    Type: String
+    Default: accountentry-backfill-bucket
+
+  AccountEntryDDBStream:
+    Type: String
+    Default: arn:aws:dynamodb:ap-south-1:564984376078:table/AccountEntryTable/stream/2022-03-10T13:21:35.767
+
+
+Resources:
+  AccountingEntryBackFillLambda:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: PerFinDashboardLambda.handlers.accountentry_backfill.AccountEntryBackFillHandler
+      Runtime: python3.9
+      Description: To backfill the values for accounting entry from uploaded statements
+      Timeout: 60
+      MemorySize: 128
+      Role:
+        Fn::GetAtt:
+          - AccountingEntryBackFillLambdaRole
+          - Arn
+
+
+  TagRulesMatcherLambda:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: PerFinDashboardLambda.handlers.tag_rules_matcher_handler.TagRulesMatcherHandler
+      Runtime: python3.9
+      Description: To backfill the values for accounting entry from uploaded statements
+      Timeout: 60
+      MemorySize: 128
+      Role:
+        Fn::GetAtt:
+          - TagRulesMatcherLambdaRole
+          - Arn
+      Events:
+        Stream:
+          Type: DynamoDB
+          Properties:
+            Stream: !Ref AccountEntryDDBStream
+            BatchSize: 1
+            StartingPosition: TRIM_HORIZON
+
+  WebsiteAPIRequestHandlerLambda:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: PerFinDashboardLambda.handlers.website_api_request_handler.WebsiteAPIRequestHandler
+      Runtime: python3.9
+      Description: Request Handler Lambda which would serve the Website requests
+      Timeout: 60
+      MemorySize: 128
+      Role:
+        Fn::GetAtt:
+          - WebsiteAPIRequestHandlerLambdaRole
+          - Arn
+
+
+
+  AccountingEntryBackFillLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Action:
+            - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+              - lambda.amazonaws.com
+
+  TagRulesMatcherLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+
+  WebsiteAPIRequestHandlerLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Action:
+            - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+              - lambda.amazonaws.com
+
+
+  AccountingEntryBackFillLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: AccountingEntryBackFillLambda
+    Properties:
+      LogGroupName: {"Fn::Sub":"/aws/lambda/${AccountingEntryBackFillLambda}"}
+
+  TagRulesMatcherLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: AccountingEntryBackFillLambda
+    Properties:
+      LogGroupName: { "Fn::Sub": "/aws/lambda/${TagRulesMatcherLambda}" }
+
+
+  WebsiteAPIRequestHandlerLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    DependsOn: AccountingEntryBackFillLambda
+    Properties:
+      LogGroupName: { "Fn::Sub": "/aws/lambda/${WebsiteAPIRequestHandlerLambda}" }
+
+
+  BankAccountStatementBucket:
+    Type: AWS::S3::Bucket
+    DependsOn: BankAccountStatementBucketPermission
+    Properties:
+      BucketName: !Ref BankAccountStatementBucketName
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:Put
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: csv
+            Function: !GetAtt [AccountingEntryBackFillLambda,Arn]
+
+
+  BankAccountStatementBucketPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn: AccountingEntryBackFillLambda
+    Properties:
+      FunctionName:
+        Fn::GetAtt:
+          - AccountingEntryBackFillLambda
+          - Arn
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn:
+        Fn::Sub: arn:aws:s3:::${BankAccountStatementBucketName}
