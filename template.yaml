@@ -9,17 +9,32 @@ Description: >
 Globals:
   Function:
     Timeout: 3
+
 Parameters:
   BankAccountStatementBucketName:
     Type: String
     Default: accountentry-backfill-bucket
-
-  AccountEntryDDBStream:
+    
+  TransactionsDDBStreamARN:
     Type: String
-    Default: arn:aws:dynamodb:ap-south-1:564984376078:table/AccountEntryTable/stream/2022-03-10T13:21:35.767
-
+    Default: arn:aws:dynamodb:ap-south-1:564984376078:table/TransactionsMetadataTable/stream/2022-04-29T11:28:07.587
+  
+  TransactionsFileUploadDDBStreamARN:
+    Type: String
+    Default: arn:aws:dynamodb:ap-south-1:564984376078:table/TransactionFilesUploadTable/stream/2022-05-10T12:59:08.524
 
 Resources:
+  PythonLibraryLayer:
+      Type: AWS::Serverless::LayerVersion
+      Properties:
+          LayerName: python-dependencies
+          Description: Dependencies for Statements Processor
+          ContentUri: lib/
+          CompatibleRuntimes:
+            - python3.9
+          LicenseInfo: 'MIT'
+          RetentionPolicy: Retain
+
   AccountingEntryBackFillLambda:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
@@ -52,7 +67,30 @@ Resources:
         Stream:
           Type: DynamoDB
           Properties:
-            Stream: !Ref AccountEntryDDBStream
+            Stream: !Ref TransactionsDDBStreamARN
+            BatchSize: 1
+            StartingPosition: TRIM_HORIZON
+
+  StatementsProcessorLambda:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: PerFinDashboardLambda.handlers.statements_processor.StatementsProcessor
+      Runtime: python3.9
+      Layers:
+        - !Ref PythonLibraryLayer
+      Description: Processing the uploaded statements (pdf/csv)
+      Timeout: 300
+      MemorySize: 128
+      Role:
+        Fn::GetAtt:
+          - StatementsProcessorLambdaRole
+          - Arn
+      Events:
+        Stream:
+          Type: DynamoDB
+          Properties:
+            Stream: !Ref TransactionsFileUploadDDBStreamARN
             BatchSize: 1
             StartingPosition: TRIM_HORIZON
 
@@ -94,6 +132,23 @@ Resources:
     Properties:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+  
+  StatementsProcessorLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -171,3 +226,4 @@ Resources:
       Principal: s3.amazonaws.com
       SourceArn:
         Fn::Sub: arn:aws:s3:::${BankAccountStatementBucketName}
+

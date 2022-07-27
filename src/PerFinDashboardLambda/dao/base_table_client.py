@@ -28,7 +28,7 @@ class BaseTableClient:
             self._write_items_list = []
             return status
         else:
-            return False
+            return True
 
     def get_item(self,getItemRequest):
         response,result = self.db_client.get(getItemRequest)
@@ -64,6 +64,10 @@ class BaseTableClient:
         response,result = self.db_client.update(updateItemRequest)
         return response
 
+    def delete_item(self,deleteItemRequest):
+        response,result = self.db_client.delete_item(deleteItemRequest)
+        return response
+
     def query_all(self,queryItemRequest):
         queryItemRequest.Limit(100)
         lastKey = 1
@@ -77,4 +81,9 @@ class BaseTableClient:
     def add_item(self,itemRequest):
         put_request = {'PutRequest':{'Item':~itemRequest}}
         self._write_items_list.append(put_request)
-        self.batch_write_items()
+        return self.batch_write_items()
+
+    def add_delete_item(self,itemRequest):
+        delete_request = {'DeleteRequest':~itemRequest}
+        self._write_items_list.append(delete_request)
+        return self.batch_write_items()

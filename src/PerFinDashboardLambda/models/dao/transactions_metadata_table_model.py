@@ -1,17 +1,16 @@
 from PerFinDashboardLambda.models.base_model import BaseModel
-class AccountingEntryTableModel(BaseModel):
-    TABLE_NAME = 'AccountEntryTable'
+class TransactionsMetadataTableModel(BaseModel):
+    TABLE_NAME = 'TransactionsMetadataTable'
     def __init__(self,object=None):
         self.fields = [
             'internalTxnId',
             'txnTimestamp',
-            'accountId',
             'externalTxnId',
+            'accountId',
             'externalAccountId',
-            'txnType',
             'txnDescription',
-            'amount',
-            'lastModifiedTimestamp'
+            'txnAmount',
+            'txnType'
         ]
         BaseModel.__init__(self,object)
 

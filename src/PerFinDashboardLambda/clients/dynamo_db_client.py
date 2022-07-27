@@ -71,6 +71,18 @@ class DynamoDBClient:
             print(~(writeInput))
         return False, {}
 
+    
+        '''Write DDB Item'''
+    def delete_item(self, deleteInput):
+        try:
+            _response = self.table.delete_item(**~deleteInput)
+            # TODO : _response needs to be analysed for failure
+            return True, _response
+        except:
+            traceback.print_exc()
+            print(~(deleteInput))
+        return False, {}
+
     '''Write DDB Items in batch'''
     def batch_write_items(self,batchWriteInput):
         try:

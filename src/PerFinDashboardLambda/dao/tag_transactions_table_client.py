@@ -6,10 +6,10 @@ class TagTransactionsTableClient(BaseTableClient):
     def __init__(self):
         BaseTableClient.__init__(self,TagTransactionsTableModel)
 
-    def add_tag_txn_entry(self,tagItem,accountEntry):
+    def add_tag_txn_entry(self,tagId,accountEntry):
         self.add_item(
         TagTransactionsTableModel()
-            .tagId(tagItem.GettagId())
+            .tagId(tagId)
             .internalTxnId(accountEntry.GetinternalTxnId())
             .txnTimestamp(accountEntry.GettxnTimestamp()))
 

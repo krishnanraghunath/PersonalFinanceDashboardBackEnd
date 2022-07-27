@@ -4,10 +4,11 @@ class TagMetadataTableModel(BaseModel):
     def __init__(self,object=None):
         self.fields = [
             'tagId',
-            'acountId',
-            'tagName',
-            'tagColor',
             'tagRules',
+            'user_id',
+            'creationTime',
+            'lastModifiedTime',
+            'tagName',
             'status'
         ]
         BaseModel.__init__(self,object)
